@@ -1,0 +1,50 @@
+func main()
+
+
+
+
+  Global ComPort as integer
+  ComPort=FileQuickLoad(".Port")
+  if ComPort = 0 then ComPort = 1
+  
+  FormMenu(0,0,1,"Settings")
+  
+  FormMenu(1,0,1,"Com Port="+ComPort)
+  
+  
+   dim x as integer
+   dim tstr as string
+   dim tmp as integer
+
+
+   x=ComOpen(1,baud=4800,port=ComPort)
+   print "Open Status=";x
+
+
+loop:
+
+'--- Check Form Menus ----
+   select integer FormMenu(0,0)
+    case 1
+      tmp = InputBox("Enter Com Port", "Com Port", ComPort)
+      if tmp > 0 then
+        ComPort = tmp
+        FileQuickSave(".Port",ComPort)
+        ComClose(1)
+        x=ComOpen(1,baud=4800,port=ComPort)
+        print "Open Status=";x
+        FormMenu(1,0,1,"Com Port="+ComPort)
+      endif
+    endselect
+
+
+   x = ComBuff(1)
+   if x > 0 then
+       tstr = ComInput(1)
+       print tstr;
+   endif
+   goto loop
+
+
+endfunc
+

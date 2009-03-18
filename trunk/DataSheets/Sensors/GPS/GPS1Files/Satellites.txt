@@ -1,0 +1,390 @@
+func main()
+
+
+  Global ComPort as integer
+  ComPort=FileQuickLoad(".Port")
+  if ComPort = 0 then ComPort = 1
+  
+  FormMenu(0,0,1,"Settings")
+  
+  FormMenu(1,0,1,"Com Port="+ComPort)
+  
+  
+   dim x as integer
+   dim tstr as string
+   dim tmp as integer
+   global rxdat as string
+
+   x=ComOpen(1,baud=4800,port=ComPort)
+   print "Open Status=";x
+
+   nema_DisplayForm()
+   FormUpdateAutoOff()
+   GSV_NOM=0
+   GSV_MSG=0
+   
+'-------------------------------------------
+'  Main Program Loop
+'-------------------------------------------
+
+loop:
+
+'--- Check Form Menus ----
+   select integer FormMenu(0,0)
+    case 1
+      tmp = InputBox("Enter Com Port", "Com Port", ComPort)
+      if tmp > 0 then
+        ComPort = tmp
+        FileQuickSave(".Port",ComPort)
+        ComClose(1)
+        x=ComOpen(1,baud=4800,port=ComPort)
+        print "Open Status=";x
+        FormMenu(1,0,1,"Com Port="+ComPort)
+      endif
+    endselect
+
+
+   x = ComBuff(1)
+   if x > 0 then
+       tstr = ComInput(1)
+       rxdat = rxdat + tstr
+       procdata()
+       'print tstr;
+   endif
+   goto loop
+
+
+endfunc
+
+
+'------------------------------------------
+'Collect a line of data
+'------------------------------------------
+func procdata()
+  dim lndat as string
+  dim st as integer
+  
+again:
+  'print "datlen="+len(rxdat)
+  st = instr(rxdat,1,chr(10))
+  if st > 0 then
+   
+   lndat = left(rxdat,st)
+   rxdat = mid(rxdat,st+1,9999)
+
+   
+   lndat = replace(lndat,chr(13),"")
+   lndat = replace(lndat,chr(10),"")
+   strif left(lndat,1) = "$" then
+     procnema(lndat)
+     displaydata()
+   endif
+   goto again
+  endif
+endfunc
+
+
+
+
+'----------------------------------------
+'  Take a line of NEMA data and proccess it
+'----------------------------------------
+func procnema(lndat as string)
+   dim msg as string
+   print lndat,len(lndat),asc(mid(lndat,1,1))
+   
+    if calcchecksum(lndat) = 0 then
+      print "Checksum Error"
+      exit()
+    endif
+   
+   '-----------------------------
+   'Get msg type
+   msg = replace(getword(lndat,1,1,","),"$GP","")
+   select case msg
+     case "GSA"
+        procGSA(lndat)
+     case "GSV"
+        procGSV(lndat)
+   endselect
+   
+   
+endfunc
+
+
+
+'-----------------------------------------
+'Checks the NEMA message checksum
+'  Return 0 if error and 1 if OK
+'-----------------------------------------
+func calcchecksum(lndat as string)
+   dim x as integer
+   dim dt as integer
+   dim tot as integer
+   tot = 0
+   for x = 1 to len(lndat)
+     dt = asc(mid(lndat,x,1))
+     if dt = 42 then goto done
+     if x > 1 then
+       tot = tot ^ dt
+     endif
+   next
+   
+done:
+  if val("&h"+right(lndat,2)) <> tot then
+     exit(0)
+  else
+     exit(1)
+  endif
+  
+  
+endfunc
+
+
+
+'-------------------------------------------
+'Get Satellite Data
+'  Populates the following global variables:
+'     GSV_SATSINVIEW integer
+'     GSV_NOM integer   (Number of messages)
+'     GSV_MSG integer (current message)
+'     GSV_SATIDS(x) integer array
+'     GSV_SATELE(x) intger array
+'     GSV_SATAZ(x) integer array
+'     GSV_SATSNR(x) integer array
+'
+'     When GSV_NOM = GSV_MSG then all data
+'      has been collected.  At that point 
+'      you should set GSV_NOM = 0
+'-------------------------------------------
+func procGSV(lndat as string) as integer
+  dim st as integer
+  dim x as integer
+  dim str as string
+  dim idx as integer
+  global GSV_SATSINVIEW as integer
+  global GSV_NOM as integer
+  global GSV_MSG as integer
+
+  global GSV_SATIDS(40) as integer
+  global GSV_SATELE(40) as integer
+  global GSV_SATAZ(40) as integer
+  global GSV_SATSNR(40) as integer
+  
+  dim sat as integer
+  dim elv as integer
+  dim az as integer
+  dim snr as integer
+  
+
+  st=getword(lndat,1,4,",*")
+  GSV_SATSINVIEW = st
+ 
+  GSV_NOM=0
+  GSV_MSG=0
+  GSV_NOM=getword(lndat,1,2,",*")
+  GSV_MSG=getword(lndat,1,3,",*")
+
+  'If this is the first msg clear all data
+  if GSV_MSG=1 then
+    for x = 0 to 39
+      GSV_SATIDS(x)=0
+      GSV_SATELE(x)=0
+      GSV_SATAZ(x)=0
+      GSV_SATSNR(x)=0
+    next
+  endif
+  
+  idx = 1
+ 
+  
+  lndat = replace(lndat,",",", ")
+  
+  for x = 0 to 3
+   str = getword(lndat,1,x*4+5,",")
+   if instr(str,1,"*")>0 then 
+     exit(0)
+   endif
+   GSV_SATIDS((GSV_MSG-1)*4+x)=str
+  
+  
+   str = getword(lndat,1,x*4+6,",")
+   GSV_SATELE((GSV_MSG-1)*4+x)=str
+
+   str = getword(lndat,1,x*4+7,",")
+   GSV_SATAZ((GSV_MSG-1)*4+x)=str
+  
+   str = getword(lndat,1,x*4+8,",*")
+   strif str <> " " then
+     GSV_SATSNR((GSV_MSG-1)*4+x)=str
+   else
+     GSV_SATSNR((GSV_MSG-1)*4+x)=-1
+   endif
+  
+ 
+  next
+  
+  
+  
+  
+endfunc
+
+
+
+'-------------------------------------------
+'GPS Reciever Mode
+'  Populates global string GSA_SATMODE
+'            global string GSA_SATCOUNT
+'-------------------------------------------
+func procGSA(lndat as string)
+  dim st as integer
+  dim x as integer
+  dim str as string
+  dim tcount as integer
+  
+  Global GSA_SATMODE as string
+  Global GSA_SATCOUNT as string
+  dim satchans(30) as integer
+  
+  GSA_SATCOUNT = "0"
+  tcount = 0
+  
+  
+  st = getword(lndat,1,3,",")
+  select integer st
+     case 1
+       GSA_SATMODE = "NA"
+     case 2
+       GSA_SATMODE = "2D"
+     case 3
+       GSA_SATMODE = "3D"
+   endselect
+   
+   
+   lndat = replace(lndat,",",", ")
+   for x = 1 to 12
+     str = getword(lndat,1,3+x,",*")
+     strif str <> " " then
+        st = str
+        satchans(x) = st
+        tcount = tcount + 1
+        GSA_SATCOUNT = tcount
+        
+     else
+        satchans(x) = 0
+     endif
+     next
+   
+endfunc
+
+
+
+'------------------------------------------------------
+' Display collected data
+'------------------------------------------------------
+func displaydata()
+     dim x as integer
+     Formlabel(NEMA_mode,-1,-1,-1,-1,GSA_SATMODE)
+     Formlabel(NEMA_sats,-1,-1,-1,-1,GSA_SATCOUNT)
+     
+     if GSV_NOM > 0 and GSV_NOM = GSV_MSG then
+      FormCLS()
+     
+      for x = 0 to 20
+         
+       if GSV_SATIDS(x)>0 then
+          'FormBrush(228,228,228)
+          'FormFillRectangle(GSV_SATIDS(x)*4,50,3,100)
+   
+           FormBrush(228,100,100)
+           if GSV_SATSNR(x) = -1 then
+             FormFillRectangle(GSV_SATIDS(x)*4,150-1,3,1)
+           else
+             FormFillRectangle(GSV_SATIDS(x)*4,150-GSV_SATSNR(x),3,GSV_SATSNR(x))
+          endif
+          
+        endif
+      next
+      formupdate()
+      GSV_NOM=0
+      GSV_MSG=0  
+     endif
+endfunc
+
+
+'-------------------------------------------------------------------------------
+'<FormBuilderStart(nema)>
+'-------------------------------------------------------------------------------
+func nema_DisplayForm(FormSizeX as integer,FormSizeY as integer)
+
+   'Form Generated by Zeus FormBuilder
+
+   if getargs() = 0 then
+      FormRes(240,268)
+      FormSizeX=240
+      FormSizeY=268
+   else
+      FormRes(FormSizeX,FormSizeY)
+   endif
+    FormNew()
+   FormBGColor(228,228,228)
+   FormCLS()
+
+
+
+
+'--- Labels ---
+   gconst nema_Label0 0
+   gconst nema_mode 1
+   gconst nema_Label1 2
+   gconst nema_sats 3
+
+
+   FormTextColor(0,0,0)
+   FormFont("-",9,1)
+   FormLabel(nema_Label0,11,10,43,20,"Mode:")
+   FormFont("-",9,0)
+   FormLabel(nema_mode,51,10,26,20,"")
+   FormFont("-",9,1)
+   FormLabel(nema_Label1,90,10,86,20,"Satellites:")
+   FormFont("-",9,0)
+   FormLabel(nema_sats,174,10,26,20,"")
+
+
+   FormBGColor(228,228,228)
+
+
+
+endfunc
+
+func nema_CheckButtons() as integer
+   dim tret as integer
+   tret=-1
+
+ if FormAllButtons() = 1 then 
+
+ endif 
+
+   exit(tret)
+endfunc
+
+'FormBuilder Data
+'<%~~FB Start~~#>
+'~	4
+'~	228
+'~	228
+'~	228
+'~	240
+'~	268
+'~	
+'~	
+'~	
+'~	
+'~	
+'~	
+'~	1	11	10	43	20	0	0	228	228	228	0	0	0	1	0	0	0	1	1	9	Label0	Mode:	
+'~	1	51	10	26	20	0	0	228	228	228	0	0	0	1	0	0	0	1	0	9	mode		
+'~	1	90	10	86	20	0	0	228	228	228	0	0	0	1	0	0	0	1	1	9	Label1	Satellites:	
+'~	1	174	10	26	20	0	0	228	228	228	0	0	0	1	0	0	0	1	0	9	sats		
+'-------------------------------------------------------------------------------
+'<FormBuilderEnd>
