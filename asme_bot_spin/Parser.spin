@@ -54,97 +54,48 @@ PUB  readserialport | i, j, teststr, strvalue, LDrive, RDrive
     PWM.Set(i,1500)
 
   PWM.Start
+
+
   
   repeat
-  
+
     longfill(serialbuff,14,0)
 
-    repeat while Rx <>= ES
-      UART.tx(Rx)
-      Rx := UART.rx
-
-    repeat while UART.rxcheck == -1
-      Rx := 0
-      
-    Rx := UART.rx
-    
-    if(Rx == "A")
-      UART.str(string("UP"))
-      UART.tx(CR)
-      UART.tx(LF)
-
-    if(Rx == "B")
-      UART.str(string("DOWN"))
-      UART.tx(CR)
-      UART.tx(LF)
-    
-    if(Rx == "C")
-      UART.str(string("RIGHT"))
-      UART.tx(CR)
-      UART.tx(LF)
-    
-    if(Rx == "D")
-      UART.str(string("LEFT"))
-      UART.tx(CR)
-      UART.tx(LF)
-    
-    'repeat while Rx <>= "$"      ' wait for the $ to insure we are starting with
-    '  Rx := UART.rx              '   a complete NMEA sentence
+    repeat while Rx <>= "$"      ' wait for the $ to insure we are starting with
+      Rx := UART.rx              '   a complete NMEA sentence
        
-    'cptr := 0
+    cptr := 0
 
-    'repeat while Rx <>= CR       '  continue to collect data until the end of the NMEA sentence 
-    '  Rx := UART.rx              '  get character from Rx Buffer
-    '  UART.tx(Rx)
-    '  serialbuff[cptr++] := Rx     '  else save the character
+    repeat while Rx <>= CR       '  continue to collect data until the end of the NMEA sentence 
+      Rx := UART.rx              '  get character from Rx Buffer
+      serialbuff[cptr++] := Rx     '  else save the character
 
-    'serialbuff[cptr] := 0
-   
-    'UART.str(string("<CR>"))
-    'UART.str(@serialbuff)
-    'UART.dec(cptr)
+    serialbuff[cptr] := 0
+    serialbuff[5] := 0
    
     if(strcomp(@serialbuff,@DRIVEcon)) ' Received Drive Command
       DRIVEvalue := UTIL.strntodec(@serialbuff[6], 0)
-      UART.str(string("DRIVE command recieved"))
-      UART.tx(CR)
-      UART.tx(LF)
-      UART.dec(DRIVEvalue)
      
     elseif(strcomp(@serialbuff,@STEERcon)) ' Received Steer Command
       STEERvalue := UTIL.strntodec(@serialbuff[6],0)
-      UART.str(string("STEER command recieved"))
-      UART.tx(CR)
-      UART.tx(LF)
-      UART.dec(STEERvalue)
       
     elseif(strcomp(@serialbuff,@CLAWcon)) ' Received Claw Command
-      UART.str(string("CLAW command recieved"))
-      UART.tx(CR)
-      UART.tx(LF)
       CLAWvalue := UTIL.strntodec(@serialbuff[6],0)
-      UART.dec(CLAWvalue)
-      PWM.Set(ClawPin, CLAWvalue)
     
     elseif(strcomp(@serialbuff,@CONVcon)) ' Received Conveyor Command
       CONVvalue := UTIL.strntodec(@serialbuff[6], 0)
-      PWM.Set(CONVPin, CONVValue)
-      UART.str(string("CONV command recieved"))
-      UART.tx(CR)
-      UART.tx(LF)
-      UART.dec(CONVvalue)
 
     elseif(strcomp(@serialbuff,@GATEcon)) ' Received Gate Command
       GATEvalue := UTIL.strntodec(@serialbuff[6], 0)  
-      PWM.Set(GatePin, GATEvalue)
-      UART.str(string("GATE command recieved"))
-      UART.tx(CR)
-      UART.tx(LF)
-      UART.dec(GATEvalue)
 
     LDrive := 1000 #> (DRIVEvalue + STEERvalue - 1500) <# 2000
     RDrive := 1000 #> (DRIVEvalue - STEERvalue + 1500) <# 2000
+
+    PWM.Set(ClawPin, CLAWvalue)
+    PWM.Set(CONVPin, CONVValue)
+    PWM.Set(GatePin, GATEvalue)
     PWM.Set(LDrivePin, LDrive)
     PWM.Set(RDrivePin, RDrive)
+
     waitcnt(Delay + cnt)
                                                                                                                                                                                                                                                                                                                                                                                                              
